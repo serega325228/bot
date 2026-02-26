@@ -10,6 +10,8 @@ from app.bot.filters.is_admin import IsAdmin
 from app.bot.keyboards.keyboards import admin_menu_keyboard, stops_keyboard, stops_management_keyboard, users_keyboard, users_management_keyboard
 from app.models.user import User, UserRole
 from app.services.ride import RideService
+from app.services.user import UserService
+from app.services.stop import StopService
 
 router = Router()
 router.message.filter(IsAdmin())
@@ -117,9 +119,9 @@ async def get_users_menu_handler(
 )
 async def get_list_of_users_handler(
     message: Message,
-    ride_service: RideService
+    user_service: UserService
 ):
-    users = await ride_service.get_all_users()
+    users = await user_service.get_all_users()
     
     text = "👥 <b>Пользователи:</b>\n\n"
     
@@ -151,25 +153,25 @@ async def add_user_start_handler(
 async def add_user_waiting_forward_message_handler(
     message: Message,
     state: FSMContext,
-    ride_service: RideService
+    user_service: UserService
 ):
     if message.text == "/cancel":
         await state.clear()
         await message.answer("❌ Отменено")
         return
-    
+
     if not message.forward_from and not message.forward_sender_name:
         await message.answer("❌ Нужно переслать сообщение от пользователя")
         return
-    
+
     telegram_id = message.forward_from.id if message.forward_from else None
     nickname = message.forward_from.username if message.forward_from else None
-    
+
     if not telegram_id:
         await message.answer("❌ Не удалось получить ID пользователя")
         return
-    
-    existing = await ride_service.get_user_by_id(id=telegram_id)
+
+    existing = await user_service.get_user_by_id(id=telegram_id)
     if existing:
         await message.answer("❌ Пользователь с таким ID уже существует")
         await state.clear()
@@ -184,7 +186,7 @@ async def add_user_waiting_forward_message_handler(
 async def add_user_waiting_full_name_handler(
     message: Message,
     state: FSMContext,
-    ride_service: RideService
+    user_service: UserService
 ):
     if message.text == "/cancel":
         await state.clear()
@@ -197,8 +199,8 @@ async def add_user_waiting_full_name_handler(
     if not full_name:
         await message.answer("Введите ФИО")
         return
-    
-    await ride_service.create_user(
+
+    await user_service.create_user(
         id=data["id"],
         nickname=data["nickname"],
         full_name=full_name,
@@ -218,9 +220,9 @@ async def add_user_waiting_full_name_handler(
 )
 async def select_change_user_handler(
     message: Message,
-    ride_service: RideService
+    user_service: UserService
 ):
-    users = await ride_service.get_all_users()
+    users = await user_service.get_all_users()
 
     await message.answer(
         "👤 Выберите пользователя:",
@@ -272,7 +274,7 @@ async def change_user_field_handler(
 @router.message(ChangeUser.waiting_for_role)
 async def change_user_role_handler(
     message: Message,
-    ride_service: RideService,
+    user_service: UserService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -285,16 +287,16 @@ async def change_user_role_handler(
     if role not in ["пассажир", "админ", "водитель"]:
         await message.answer("Выберите роль из перечня")
         return
-    
+
     data = await state.get_data()
 
     match role:
         case "пассажир":
-            await ride_service.make_passenger(id=data["user_id"])
+            await user_service.make_passenger(id=data["user_id"])
         case "админ":
-            await ride_service.make_admin(id=data["user_id"])
+            await user_service.make_admin(id=data["user_id"])
         case "водитель":
-            await ride_service.make_driver(id=data["user_id"])
+            await user_service.make_driver(id=data["user_id"])
 
     await state.clear()
     await message.answer("✅ Роль успешно изменена")
@@ -302,7 +304,7 @@ async def change_user_role_handler(
 @router.message(ChangeUser.waiting_for_is_active)
 async def change_user_is_active_handler(
     message: Message,
-    ride_service: RideService,
+    user_service: UserService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -315,15 +317,15 @@ async def change_user_is_active_handler(
     if answer not in ["да", "нет"]:
         await message.answer("Выберите состояние из перечня")
         return
-    
+
     data = await state.get_data()
 
     match answer:
         case "да":
-            await ride_service.deactivate_user(id=data["user_id"])
+            await user_service.activate_user(id=data["user_id"])
             await message.answer("✅ Теперь пользователь активен")
         case "нет":
-            await ride_service.activate_user(id=data["user_id"])
+            await user_service.deactivate_user(id=data["user_id"])
             await message.answer("❌ Теперь пользователь неактивен")
 
     await state.clear()
@@ -331,7 +333,7 @@ async def change_user_is_active_handler(
 @router.message(ChangeUser.waiting_for_nickname)
 async def change_user_nickname_handler(
     message: Message,
-    ride_service: RideService,
+    user_service: UserService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -343,7 +345,7 @@ async def change_user_nickname_handler(
 
     data = await state.get_data()
 
-    await ride_service.change_nickname(id=data["user_id"], nickname=nickname)
+    await user_service.change_nickname(id=data["user_id"], nickname=nickname)
 
     await state.clear()
     await message.answer("✅ Никнейм успешно изменен")
@@ -351,7 +353,7 @@ async def change_user_nickname_handler(
 @router.message(ChangeUser.waiting_for_full_name)
 async def change_user_full_name_handler(
     message: Message,
-    ride_service: RideService,
+    user_service: UserService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -363,22 +365,22 @@ async def change_user_full_name_handler(
 
     data = await state.get_data()
 
-    await ride_service.change_full_name(id=data["user_id"], full_name=full_name)
+    await user_service.change_full_name(id=data["user_id"], full_name=full_name)
 
     await state.clear()
     await message.answer("✅ ФИО успешно изменено")
 
 @router.message(
-    or_f(    
+    or_f(
         Command("delete_user"),
         F.text == "Удалить пользователя"
     )
 )
 async def select_delete_user_handler(
     message: Message,
-    ride_service: RideService
+    user_service: UserService
 ):
-    users = await ride_service.get_all_users()
+    users = await user_service.get_all_users()
 
     await message.answer(
         "👤 Выберите пользователя:",
@@ -387,12 +389,12 @@ async def select_delete_user_handler(
 
 @router.callback_query(lambda c: c.data.startswith("admin_delete_user:"))
 async def delete_user_handler(
-    callback: CallbackQuery, 
-    ride_service: RideService,
+    callback: CallbackQuery,
+    user_service: UserService,
 ):
     user_id = int(callback.data.split(":")[1])
 
-    await ride_service.delete_user(id=user_id)
+    await user_service.delete_user(id=user_id)
 
     await callback.message.edit_text("✅ Пользователь успешно удален")
 
@@ -419,20 +421,20 @@ async def get_stops_menu_handler(
 )
 async def get_all_stops_handler(
     message: Message,
-    ride_service: RideService
+    stop_service: StopService
 ):
-    stops = await ride_service.get_all_stops()
+    stops = await stop_service.get_all_stops()
 
     if not stops:
         await message.answer("Остановки не настроены")
         return
-    
+
     text = "📍 <b>Остановки:</b>\n\n"
-    
+
     for stop in sorted(stops, key=lambda s: s.order):
         status = "✅" if stop.is_active else "❌"
         text += f"{status} {stop.order}. {stop.name}\n"
-    
+
     await message.answer(text, reply_markup=stops_management_keyboard())
 
 @router.message(
@@ -456,21 +458,21 @@ async def add_stop_start_handler(
 async def add_stop_waiting_name_handler(
     message: Message,
     state: FSMContext,
-    ride_service: RideService
+    stop_service: StopService
 ):
     if message.text == "/cancel":
         await state.clear()
         await message.answer("❌ Отменено")
         return
-    
-    existing = await ride_service.get_stop_by_name(name=message.text)
+
+    existing = await stop_service.get_stop_by_name(name=message.text)
     if existing:
         await message.answer("❌ Остановка уже добавлена")
         await state.clear()
         return
-    
+
     await message.answer("Введите координаты остановки через пробел")
-    
+
     await state.update_data(name=message.text)
     await state.set_state(AddStop.waiting_for_coordinates)
 
@@ -483,9 +485,15 @@ async def add_stop_waiting_coordinates_handler(
         await state.clear()
         await message.answer("❌ Отменено")
         return
-    
-    coordinates = list(map(float, message.text.replace(",", ".").split()))
-    
+
+    try:
+        coordinates = list(map(float, message.text.replace(",", ".").split()))
+        if len(coordinates) != 2:
+            raise ValueError("Нужно 2 координаты")
+    except ValueError:
+        await message.answer("❌ Неверный формат координат. Пример: 55.751244 37.618423")
+        return
+
     await message.answer("Введите порядковый номер остановки")
 
     await state.update_data(coordinates=coordinates)
@@ -495,27 +503,32 @@ async def add_stop_waiting_coordinates_handler(
 async def add_stop_waiting_order_handler(
     message: Message,
     state: FSMContext,
-    ride_service: RideService
+    stop_service: StopService
 ):
     if message.text == "/cancel":
         await state.clear()
         await message.answer("❌ Отменено")
         return
-    
-    order = int(message.text)
+
+    try:
+        order = int(message.text)
+    except ValueError:
+        await message.answer("❌ Порядковый номер должен быть числом")
+        return
+
     data = await state.get_data()
 
-    await ride_service.create_stop(
+    await stop_service.create_stop(
         name=data["name"],
         latitude=data["coordinates"][0],
         longitude=data["coordinates"][1],
         order=order
     )
-    
+
     await state.clear()
     await message.answer(
-        f"✅ Остановка добавлен!\n\n"
-        f"📍 {data["name"]}\n"
+        f"✅ Остановка добавлена!\n\n"
+        f"📍 {data['name']}\n"
     )
 
 @router.message(
@@ -526,9 +539,9 @@ async def add_stop_waiting_order_handler(
 )
 async def select_change_stop_handler(
     message: Message,
-    ride_service: RideService
+    stop_service: StopService
 ):
-    stops = await ride_service.get_active_stops()
+    stops = await stop_service.get_active_stops()
 
     await message.answer(
         "📍 Выберите остановку:",
@@ -537,8 +550,8 @@ async def select_change_stop_handler(
 
 @router.callback_query(lambda c: c.data.startswith("admin_change_stop:"))
 async def change_stop_handler(
-    callback: CallbackQuery, 
-    ride_service: RideService,
+    callback: CallbackQuery,
+    stop_service: StopService,
     state: FSMContext
 ):
     stop_id = int(callback.data.split(":")[1])
@@ -567,21 +580,21 @@ async def change_stop_field_handler(
     match field:
         case "название":
             await state.set_state(ChangeStop.waiting_for_name)
-            message.answer("Введите новое название")
-        case "кооридинаты":
+            await message.answer("Введите новое название")
+        case "координаты":
             await state.set_state(ChangeStop.waiting_for_coordinates)
-            message.answer("Введите координаты через пробел")
+            await message.answer("Введите координаты через пробел")
         case "порядок":
             await state.set_state(ChangeStop.waiting_for_order)
-            message.answer("Введите новые порядковый номер")
+            await message.answer("Введите новый порядковый номер")
         case "активная":
             await state.set_state(ChangeStop.waiting_for_is_active)
-            message.answer("Выберите да/нет")
+            await message.answer("Выберите да/нет")
 
 @router.message(ChangeStop.waiting_for_name)
 async def change_stop_name_handler(
     message: Message,
-    ride_service: RideService,
+    stop_service: StopService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -593,7 +606,7 @@ async def change_stop_name_handler(
 
     data = await state.get_data()
 
-    await ride_service.change_stop_name(id=data["stop_id"], name=name)
+    await stop_service.change_stop_name(id=data["stop_id"], name=name)
 
     await message.answer("Название успешно изменено")
 
@@ -602,7 +615,7 @@ async def change_stop_name_handler(
 @router.message(ChangeStop.waiting_for_coordinates)
 async def change_stop_coordinates_handler(
     message: Message,
-    ride_service: RideService,
+    stop_service: StopService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -610,13 +623,19 @@ async def change_stop_coordinates_handler(
         await message.answer("❌ Отменено")
         return
 
-    coordinates = list(map(float, message.text.split()))
+    try:
+        coordinates = list(map(float, message.text.replace(",", ".").split()))
+        if len(coordinates) != 2:
+            raise ValueError("Нужно 2 координаты")
+    except ValueError:
+        await message.answer("❌ Неверный формат координат. Пример: 55.751244 37.618423")
+        return
 
     data = await state.get_data()
 
-    await ride_service.change_stop_coordinates(
-        id=data["stop_id"], 
-        latitude=coordinates[0], 
+    await stop_service.change_stop_coordinates(
+        id=data["stop_id"],
+        latitude=coordinates[0],
         longitude=coordinates[1]
     )
 
@@ -627,7 +646,7 @@ async def change_stop_coordinates_handler(
 @router.message(ChangeStop.waiting_for_order)
 async def change_stop_order_handler(
     message: Message,
-    ride_service: RideService,
+    stop_service: StopService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -635,23 +654,27 @@ async def change_stop_order_handler(
         await message.answer("❌ Отменено")
         return
 
-    order = int(message.text)
+    try:
+        order = int(message.text)
+    except ValueError:
+        await message.answer("❌ Порядковый номер должен быть числом")
+        return
 
     data = await state.get_data()
 
-    await ride_service.change_stop_order(
-        id=data["stop_id"], 
+    await stop_service.change_stop_order(
+        id=data["stop_id"],
         order=order
     )
 
-    await message.answer("порядковый номер успешно изменен")
+    await message.answer("Порядковый номер успешно изменён")
 
     await state.clear()
 
 @router.message(ChangeStop.waiting_for_is_active)
 async def change_stop_is_active_handler(
     message: Message,
-    ride_service: RideService,
+    stop_service: StopService,
     state: FSMContext
 ):
     if message.text == "/cancel":
@@ -664,15 +687,15 @@ async def change_stop_is_active_handler(
     if answer not in ["да", "нет"]:
         await message.answer("Выберите состояние из перечня")
         return
-    
+
     data = await state.get_data()
 
     match answer:
         case "да":
-            await ride_service.deactivate_user(id=data["stop_id"])
-            await message.answer("✅ Теперь остановка активена")
+            await stop_service.activate_stop(id=data["stop_id"])
+            await message.answer("✅ Теперь остановка активна")
         case "нет":
-            await ride_service.activate_user(id=data["stop_id"])
+            await stop_service.deactivate_stop(id=data["stop_id"])
             await message.answer("❌ Теперь остановка неактивна")
 
     await state.clear()
@@ -685,9 +708,9 @@ async def change_stop_is_active_handler(
 )
 async def select_delete_stop_handler(
     message: Message,
-    ride_service: RideService
+    stop_service: StopService
 ):
-    stops = await ride_service.get_active_stops()
+    stops = await stop_service.get_active_stops()
 
     await message.answer(
         "📍 Выберите остановку:",
@@ -696,12 +719,12 @@ async def select_delete_stop_handler(
 
 @router.callback_query(lambda c: c.data.startswith("admin_delete_stop:"))
 async def delete_stop_handler(
-    callback: CallbackQuery, 
-    ride_service: RideService,
+    callback: CallbackQuery,
+    stop_service: StopService,
 ):
     stop_id = uuid.UUID(callback.data.split(":")[1])
 
-    await ride_service.delete_stop(id=stop_id)
+    await stop_service.delete_stop(id=stop_id)
 
     await callback.message.edit_text("✅ Остановка успешно удалена")
 

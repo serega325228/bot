@@ -11,6 +11,12 @@ class TicketRepository:
     def __init__(self, *, session: AsyncSession):
         self.__session = session
 
+    async def get_by_id(self, *, ticket_id: uuid.UUID) -> Ticket | None:
+        """Получить билет по ID."""
+        query = select(Ticket).filter_by(id=ticket_id)
+        result = await self.__session.execute(query)
+        return result.scalar_one_or_none()
+
     async def create(self, *, ticket: Ticket):
         self.__session.add(ticket)
         await self.__session.commit()

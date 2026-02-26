@@ -13,6 +13,9 @@ from app.repositories.user import UserRepository
 from app.services.location import LocationService
 from app.services.ride import RideService
 from app.services.timer import TimerService
+from app.services.user import UserService
+from app.services.stop import StopService
+from app.services.ticket import TicketService
 from app.settings import settings
 
 
@@ -83,22 +86,38 @@ class Container(containers.DeclarativeContainer):
     location_service = providers.Singleton(
         LocationService
     )
-    
+
     timer_service = providers.Singleton(
         TimerService,
         redis=redis
     )
 
+    user_service = providers.Singleton(
+        UserService,
+        user_repo=user_repo
+    )
+
+    stop_service = providers.Singleton(
+        StopService,
+        stop_repo=stop_repo
+    )
+
+    ticket_service = providers.Singleton(
+        TicketService,
+        ticket_repo=ticket_repo,
+        ride_repo=ride_repo
+    )
+
     ride_service = providers.Singleton(
         RideService,
         bot_port=bot_port,
-        user_repo=user_repo,
         ride_repo=ride_repo,
         stop_repo=stop_repo,
-        ticket_repo=ticket_repo,
         location_service=location_service,
         timer_service=timer_service,
-        redis=redis
+        ticket_service=ticket_service,
+        stop_service=stop_service,
+        redis=redis,
     )
     
     

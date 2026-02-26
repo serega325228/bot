@@ -5,7 +5,7 @@ from aiogram.fsm.storage.redis import RedisStorage
 from app.bot.handlers.admin import router as admin
 from app.bot.handlers.passenger import router as passenger
 from app.bot.handlers.driver import router as driver
-from app.bot.middlewares.auth import AuthMiddleware
+from app.bot.middlewares.auth import AuthMiddleware, RoleAuthMiddleware
 from app.bot.middlewares.di import DIMiddleware
 from app.settings import settings
 from app.container import Container
@@ -36,8 +36,9 @@ async def main():
     dp.message.outer_middleware(DIMiddleware(container=container))
     dp.callback_query.outer_middleware(DIMiddleware(container=container))
 
-    dp.message.outer_middleware(AuthMiddleware())
-    dp.callback_query.outer_middleware(AuthMiddleware())
+    # RoleAuthMiddleware для всех (проверяет существование и активность)
+    dp.message.outer_middleware(RoleAuthMiddleware())
+    dp.callback_query.outer_middleware(RoleAuthMiddleware())
 
     dp.include_router(admin)
     dp.include_router(passenger)

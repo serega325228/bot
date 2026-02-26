@@ -33,9 +33,9 @@ async def start_ride_request_handler(
     ride_service: RideService
 ):
     if await ride_service.get_active_ride(driver_id=user.id):
-        message.answer(
+        await message.answer(
             "Поездка уже начата!"
-        )   
+        )
     else:
         stops = await ride_service.get_active_stops()
 

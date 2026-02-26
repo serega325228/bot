@@ -3,6 +3,8 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ride import Ride, RideStatus
+from app.models.user import User
+from app.models.ticket import Ticket
 
 class RideRepository:
     def __init__(self, *, session: AsyncSession):
@@ -65,3 +67,13 @@ class RideRepository:
         result = await self.__session.execute(query)
 
         return result.scalar_one()
+
+    async def get_users_by_ride(self, *, ride_id: uuid.UUID) -> list[User]:
+        """Получить пользователей поездки."""
+        query = (
+            select(User)
+            .join(Ticket, Ticket.user_id == User.id)
+            .filter_by(ride_id=ride_id)
+        )
+        result = await self.__session.execute(query)
+        return list(result.scalars().all())
