@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     BOARDED_GRACE_SECONDS: int = 30
     STOP_RADIUS_METERS: int = 50
     BOT_TOKEN: str
+    GPS_DEBOUNCE_SECONDS: int = 5
 
     model_config = SettingsConfigDict(
         env_file=".env",

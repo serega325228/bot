@@ -37,7 +37,7 @@ class RideService:
         self.__timer_service = timer_service
         self.__bot = bot_port
         self.__redis = redis
-        self.__LAST_GPS = {}
+        #self.__LAST_GPS = {}
 
     async def start_ride(self, *, driver_id: int, next_stop_id: uuid.UUID):
         ride = Ride(
@@ -86,12 +86,16 @@ class RideService:
         
         now = time.time()
 
-        last = self.__LAST_GPS.get(driver_id)
+        last = await self.__redis.get(f"last_gps:{driver_id}")
 
-        if last and now - last < 5:
+        if last and now - float(last) < settings.GPS_DEBOUNCE_SECONDS:
             return
         
-        self.__LAST_GPS[driver_id] = now
+        await self.__redis.set(
+            f"last_gps:{driver_id}",
+            now,
+            ex=10
+        )
 
         stop, ride = await self.__stop_repo.get_stop_n_ride_by_driver(driver_id=driver_id)
 
