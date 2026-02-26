@@ -51,7 +51,7 @@ async def go_to(state: FSMContext, new_state):
     history = data.get("history", [])
 
     current = await state.get_state()
-    if current:
+    if current and current != new_state:
         history.append(current)
 
     await state.update_data(history=history)
@@ -88,9 +88,10 @@ async def go_back_handler(
     history = data.get("history", [])
 
     if not history:
-        await message.answer("Ты уже в главном меню")
+        await state.set_state(MenuState.main_menu)
+        await show_menu(message, MenuState.main_menu.state)
         return
-    
+
     previous = history.pop()
 
     await state.update_data(history=history)
