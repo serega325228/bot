@@ -86,6 +86,7 @@ class Container(containers.DeclarativeContainer):
     
     timer_service = providers.Singleton(
         TimerService,
+        redis=redis
     )
 
     ride_service = providers.Singleton(

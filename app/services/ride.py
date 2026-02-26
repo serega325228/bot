@@ -37,7 +37,6 @@ class RideService:
         self.__timer_service = timer_service
         self.__bot = bot_port
         self.__redis = redis
-        #self.__LAST_GPS = {}
 
     async def start_ride(self, *, driver_id: int, next_stop_id: uuid.UUID):
         ride = Ride(
@@ -54,20 +53,7 @@ class RideService:
         return await self.__ride_repo.get_ride_by_driver(driver_id=driver_id)
     
     async def restore_ride_timers(self):
-        keys = await self.__redis.keys("timer:ride:*")
-
-        for key in keys:
-            ride_id = uuid.UUID(key.split(":")[-1])
-            end_at = int(await self.__redis.get(key))
-
-            ride = await self.__ride_repo.get_by_id(id=ride_id)
-            stop = await self.__stop_repo.get_by_id(id=ride.current_stop_id)
-
-            await self._schedule_ride_timer(
-                ride=ride,
-                stop=stop,
-                duration=end_at-int(time.time())
-            )
+        await self.__timer_service.restore_all_timers()
 
     async def process_driver_location(
         self,
@@ -138,19 +124,21 @@ class RideService:
         )
 
     async def on_wait_timer_expired(
-        self, 
-        *, 
-        ride: Ride, 
+        self,
+        *,
+        ride: Ride,
         stop: Stop,
         **_
     ):
-        self.__timer_service.start_timer(
+        await self.__timer_service.start_timer(
             timer_id=ride.id,
+            timer_type="grace",
             duration=settings.BOARDED_GRACE_SECONDS,
             on_expired=self.on_grace_timer_expired,
             payload={
                 "ride": ride,
-                "stop": stop
+                "stop": stop,
+                "_on_expired": self.on_grace_timer_expired
             }
         )
 
@@ -200,26 +188,19 @@ class RideService:
             )
             timer_messages[chat_id] = msg.message_id
 
-        self.__timer_service.start_timer(
+        await self.__timer_service.start_timer(
             timer_id=ride.id,
+            timer_type="wait",
             duration=duration,
-            on_expired=self.on_wait_timer_expired,
             on_tick=self.on_wait_tick,
+            on_expired=self.on_wait_timer_expired,
             payload={
                 "ride": ride,
                 "stop": stop,
-                "timer_messages": timer_messages
+                "timer_messages": timer_messages,
+                "_on_expired": self.on_wait_timer_expired
             }
         )
-
-        if not await self.__redis.get(f"timer:ride:{ride.id}"):
-
-            end_at = int(time.time()) + duration
-
-            await self.__redis.set(
-                f"timer:ride:{ride.id}",
-                end_at
-            )
 
         ride.timer_started = True
         await self.__ride_repo.save(ride=ride)

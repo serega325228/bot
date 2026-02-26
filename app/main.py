@@ -29,9 +29,7 @@ async def main():
 
     bot = container.bot()
 
-    storage = RedisStorage.from_url(
-        "redis://localhost:6379/0"
-    )
+    storage = RedisStorage.from_url(settings.REDIS_URL)
 
     dp = Dispatcher(storage=storage)
 
