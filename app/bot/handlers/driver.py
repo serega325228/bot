@@ -6,8 +6,8 @@ from aiogram.filters import Command
 from app.bot.filters.is_driver import IsDriver
 from app.bot.keyboards.keyboards import location_keyboard, stops_keyboard
 from app.models.user import User
-from app.services.location import LocationService
 from app.services.ride import RideService
+from app.services.stop import StopService
 
 router = Router()
 router.message.filter(IsDriver())
@@ -30,14 +30,15 @@ async def start_tracking_driver_location_handler(
 async def start_ride_request_handler(
     message: Message,
     user: User,
-    ride_service: RideService
+    ride_service: RideService,
+    stop_service: StopService
 ):
     if await ride_service.get_active_ride(driver_id=user.id):
         await message.answer(
             "Поездка уже начата!"
         )
     else:
-        stops = await ride_service.get_active_stops()
+        stops = await stop_service.get_active_stops()
 
         if not stops:
             await message.answer("Остановки не настроены.")
@@ -50,7 +51,7 @@ async def start_ride_request_handler(
 
 @router.callback_query(lambda c: c.data.startswith("driver_select_stop:"))
 async def driver_stop_selected_handler(
-    callback: CallbackQuery, 
+    callback: CallbackQuery,
     ride_service: RideService,
     user: User
 ):
@@ -63,7 +64,7 @@ async def driver_stop_selected_handler(
 
     await callback.message.edit_text(
         "✅ Поездка создана"
-    )    
+    )
 
 @router.message(F.location)
 async def request_driver_location_handler(
@@ -100,9 +101,9 @@ async def stop_driver_location_receiving_handler(message: Message):
 @router.message(Command("personal_choice_stop"))
 async def personal_choice_stop_handler(
     message: Message,
-    ride_service: RideService
+    stop_service: StopService
 ):
-    stops = await ride_service.get_active_stops()
+    stops = await stop_service.get_active_stops()
 
     if not stops:
         await message.answer("Остановки не настроены.")
@@ -115,13 +116,14 @@ async def personal_choice_stop_handler(
 
 @router.callback_query(lambda c: c.data.startswith("driver_note_stop:"))
 async def driver_stop_noted_handler(
-    callback: CallbackQuery, 
+    callback: CallbackQuery,
     ride_service: RideService,
+    stop_service: StopService,
     user: User
 ):
     stop_id = uuid.UUID(callback.data.split(":")[1])
 
-    stop = await ride_service.get_stop_by_id(stop_id=stop_id)
+    stop = await stop_service.get_stop_by_id(stop_id=stop_id)
 
     ride = await ride_service.get_active_ride(driver_id=user.id)
 

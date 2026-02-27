@@ -12,7 +12,6 @@ from app.models.stop import Stop
 from app.services.location import LocationService
 from app.services.timer import TimerService
 from app.services.ticket import TicketService
-from app.services.stop import StopService
 from app.repositories.ride import RideRepository
 from app.repositories.stop import StopRepository
 from app.settings import settings
@@ -41,7 +40,6 @@ class RideService:
         location_service: LocationService,
         timer_service: TimerService,
         ticket_service: TicketService,
-        stop_service: StopService,
         bot_port: BotPort,
         redis: Redis,
     ):
@@ -50,7 +48,6 @@ class RideService:
         self.__location_service = location_service
         self.__timer_service = timer_service
         self.__ticket_service = ticket_service
-        self.__stop_service = stop_service
         self.__bot = bot_port
         self.__redis = redis
 
@@ -164,7 +161,7 @@ class RideService:
                 logger.debug(f"Таймер уже запущен для поездки {ride.id}")
                 return
 
-            next_stop = await self.__stop_service.get_stop_by_order(order=stop.order + 1)
+            next_stop = await self.__stop_repo.get_by_order(order=stop.order + 1)
             if not next_stop:
                 logger.warning(f"Следующая остановка не найдена для порядка {stop.order + 1}")
                 return
@@ -201,7 +198,7 @@ class RideService:
     ) -> None:
         """Обработчик истечения таймера ожидания."""
         try:
-            self.__timer_service.start_timer(
+            await self.__timer_service.start_timer(
                 timer_id=ride.id,
                 timer_type="grace",
                 duration=settings.BOARDED_GRACE_SECONDS,
@@ -288,7 +285,7 @@ class RideService:
                 except Exception as e:
                     logger.warning(f"Не удалось отправить таймер в чат {chat_id}: {e}")
 
-            self.__timer_service.start_timer(
+            await self.__timer_service.start_timer(
                 timer_id=ride.id,
                 timer_type="wait",
                 duration=duration,
@@ -324,29 +321,3 @@ class RideService:
         except SQLAlchemyError as e:
             logger.error(f"Ошибка при получении пользователей поездки {ride_id}: {e}")
             return []
-
-    # ========== Делегирование в StopService (для хендлеров) ==========
-
-    async def get_active_stops(self):
-        return await self.__stop_service.get_active_stops()
-
-    async def get_stop_by_id(self, *, stop_id: uuid.UUID):
-        return await self.__stop_service.get_stop_by_id(stop_id=stop_id)
-
-    # ========== Делегирование в TicketService (для хендлеров) ==========
-
-    async def get_active_ticket(self, *, user_id: int):
-        return await self.__ticket_service.get_active_ticket(user_id=user_id)
-
-    async def create_or_update_ticket(self, *, stop_id: uuid.UUID, user_id: int, status):
-        await self.__ticket_service.create_or_update_ticket(
-            stop_id=stop_id,
-            user_id=user_id,
-            status=status,
-        )
-
-    async def mark_as_boarded(self, *, ticket_id: uuid.UUID):
-        await self.__ticket_service.mark_as_boarded(ticket_id=ticket_id)
-
-    async def mark_as_absent(self, *, ticket_id: uuid.UUID):
-        await self.__ticket_service.mark_as_absent(ticket_id=ticket_id)

@@ -116,7 +116,6 @@ class Container(containers.DeclarativeContainer):
         location_service=location_service,
         timer_service=timer_service,
         ticket_service=ticket_service,
-        stop_service=stop_service,
         redis=redis,
     )
     

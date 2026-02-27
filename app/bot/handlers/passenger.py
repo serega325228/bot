@@ -7,6 +7,8 @@ from app.bot.keyboards.keyboards import passenger_menu_keyboard, stops_keyboard,
 from app.models.ticket import TicketStatus
 from app.models.user import User, UserRole
 from app.services.ride import RideService
+from app.services.stop import StopService
+from app.services.ticket import TicketService
 
 router = Router()
 
@@ -25,9 +27,9 @@ async def start_bot_handler(
 @router.message(Command("stops") or F.text == "Выбрать остановку")
 async def get_stops_handler(
     message: Message,
-    ride_service: RideService
+    stop_service: StopService
 ):
-    stops = await ride_service.get_active_stops()
+    stops = await stop_service.get_active_stops()
 
     if not stops:
         await message.answer("Остановки не настроены.")
@@ -40,13 +42,13 @@ async def get_stops_handler(
 
 @router.callback_query(lambda c: c.data.startswith("passenger_select_stop:"))
 async def passenger_stop_selected_handler(
-    callback: CallbackQuery, 
-    ride_service: RideService,
+    callback: CallbackQuery,
+    ticket_service: TicketService,
     user: User
 ):
     stop_id = uuid.UUID(callback.data.split(":")[1])
 
-    await ride_service.create_or_update_ticket(
+    await ticket_service.create_or_update_ticket(
         user_id=user.id,
         stop_id=stop_id
     )
@@ -58,10 +60,11 @@ async def passenger_stop_selected_handler(
 @router.message(Command("ticket") or F.text == "Мой билет")
 async def check_active_ticket_handler(
     message: Message,
-    ride_service: RideService,
+    ticket_service: TicketService,
+    stop_service: StopService,
     user: User
 ):
-    ticket = await ride_service.get_active_ticket(user_id=user.id)
+    ticket = await ticket_service.get_active_ticket(user_id=user.id)
 
     if not ticket:
         await message.answer(
@@ -69,29 +72,29 @@ async def check_active_ticket_handler(
             "Используй /stops чтобы выбрать остановку."
         )
         return
-    
+
     if ticket.status == TicketStatus.ABSENT:
         await message.answer("\nБилет недействителен")
         return
-    
-    stop = await ride_service.get_stop_by_id(stop_id=ticket.stop_id)
+
+    stop = await stop_service.get_stop_by_id(stop_id=ticket.stop_id)
 
     text = f"🎫 <b>Ваш билет</b>\n\n"
     text += f"📍 Остановка: {stop.name}\n"
-    text += f"🔄 Статус: {ticket.status}\n"    
-    
+    text += f"🔄 Статус: {ticket.status}\n"
+
     await message.answer(text, reply_markup=ticket_keyboard())
-    
+
 @router.message(Command("boarded") or F.text == "Я в автобусе")
 async def passenger_boarded_handler(
     message: Message,
-    ride_service: RideService,
+    ticket_service: TicketService,
     user: User
 ):
-    ticket = await ride_service.get_active_ticket(user_id=user.id)
+    ticket = await ticket_service.get_active_ticket(user_id=user.id)
 
     if ticket:
-        await ride_service.mark_as_boarded(ticket_id=ticket.id)
+        await ticket_service.mark_as_boarded(ticket_id=ticket.id)
 
         await message.answer("Успешно отмечены")
     else:
@@ -100,13 +103,13 @@ async def passenger_boarded_handler(
 @router.message(Command("cancel") or F.text == "Отменить")
 async def canceled_active_ticket_handler(
     message: Message,
-    ride_service: RideService,
+    ticket_service: TicketService,
     user: User
 ):
-    ticket = await ride_service.get_active_ticket(user_id=user.id)
+    ticket = await ticket_service.get_active_ticket(user_id=user.id)
 
     if ticket:
-        await ride_service.mark_as_absent(ticket_id=ticket.id)
+        await ticket_service.mark_as_absent(ticket_id=ticket.id)
 
         await message.answer("Успешная отмена")
     else:
